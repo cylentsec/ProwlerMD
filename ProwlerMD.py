@@ -12,6 +12,44 @@ import sys
 from datetime import datetime
 from collections import defaultdict
 from pathlib import Path
+import os
+
+def load_poc_mappings(poc_file_path):
+    """Load and parse the POC mappings JSON file."""
+    print(f"Loading POC mappings from {poc_file_path}...")
+    try:
+        if os.path.exists(poc_file_path):
+            with open(poc_file_path, 'r', encoding='utf-8') as f:
+                data = json.load(f)
+            # Remove metadata for processing, keep only mappings
+            mappings = {k: v for k, v in data.items() if not k.startswith('_')}
+            print(f"Successfully loaded {len(mappings)} existing POC mappings")
+            return data  # Return full data including metadata
+        else:
+            print("POC mappings file not found, creating new one")
+            return {
+                "_metadata": {
+                    "description": "Mapping of Prowler finding titles to Proof of Concept commands/instructions",
+                    "version": "1.0",
+                    "last_updated": datetime.now().strftime("%Y-%m-%d")
+                }
+            }
+    except Exception as e:
+        print(f"Error loading POC mappings file: {e}")
+        sys.exit(1)
+
+def save_poc_mappings(poc_data, poc_file_path):
+    """Save the POC mappings JSON file."""
+    print(f"Saving POC mappings to {poc_file_path}...")
+    try:
+        # Update metadata timestamp
+        poc_data["_metadata"]["last_updated"] = datetime.now().strftime("%Y-%m-%d")
+        with open(poc_file_path, 'w', encoding='utf-8') as f:
+            json.dump(poc_data, f, indent=2, ensure_ascii=False)
+        mappings_count = len([k for k in poc_data.keys() if not k.startswith('_')])
+        print(f"Successfully saved {mappings_count} POC mappings")
+    except Exception as e:
+        print(f"Error saving POC mappings file: {e}")
 
 def load_prowler_data(json_file_path):
     """Load and parse the Prowler JSON file."""
@@ -103,7 +141,7 @@ def sort_findings_by_severity(grouped_findings):
     print(f"Severity distribution: {severity_counts}")
     return sorted_findings, severity_counts
 
-def extract_finding_details(finding, resources, resource_types):
+def extract_finding_details(finding, resources, resource_types, poc_mappings):
     """Extract and format finding details for the report."""
     title = finding.get("finding_info", {}).get("title", "Unknown Check")
     severity = finding.get("severity", "Unknown")
@@ -111,17 +149,26 @@ def extract_finding_details(finding, resources, resource_types):
     remediation = finding.get("remediation", {}).get("desc", "No remediation information available")
     reference = finding.get("unmapped", {}).get("related_url", "")
     
+    # Get POC command from mappings, add title to mappings if not present
+    poc_command = ""
+    if title in poc_mappings:
+        poc_command = poc_mappings[title] if poc_mappings[title] else ""
+    else:
+        # Add new finding title to mappings with blank value
+        poc_mappings[title] = ""
+    
     return {
         "title": title,
         "severity": severity,
         "resource_types": sorted(list(resource_types)) if resource_types else ["Unknown"],
         "risk": risk,
+        "proof_of_concept": poc_command,
         "remediation": remediation,
         "resources": sorted(list(resources)),
         "reference": reference
     }
 
-def generate_markdown_report(sorted_findings, severity_counts):
+def generate_markdown_report(sorted_findings, severity_counts, poc_mappings):
     """Generate the markdown report."""
     print("Generating markdown report...")
     
@@ -170,7 +217,7 @@ def generate_markdown_report(sorted_findings, severity_counts):
         resources = data['resources'] 
         resource_types = data['resource_types']
         
-        details = extract_finding_details(finding, resources, resource_types)
+        details = extract_finding_details(finding, resources, resource_types, poc_mappings)
         
         # Add severity section header if this is a new severity
         if details['severity'] != current_severity:
@@ -190,6 +237,30 @@ def generate_markdown_report(sorted_findings, severity_counts):
             f"**Resource Type:** {', '.join(details['resource_types'])}",
             "",
             f"**Risk:** {details['risk']}",
+            ""
+        ])
+        
+        # Add Proof of Concept section
+        report_lines.extend([
+            "**Proof of Concept:**",
+            ""
+        ])
+        
+        if details['proof_of_concept']:
+            report_lines.extend([
+                "```bash",
+                details['proof_of_concept'],
+                "```"
+            ])
+        else:
+            report_lines.extend([
+                "```",
+                "# No proof of concept command available",
+                "# Manual testing required",
+                "```"
+            ])
+        
+        report_lines.extend([
             "",
             f"**Remediation Recommendation:** {details['remediation']}",
             "",
@@ -227,8 +298,8 @@ def main():
     
     # Check command line arguments
     if len(sys.argv) != 2:
-        print("Usage: python3 generate_prowler_report.py <prowler_json_file>")
-        print("Example: python3 generate_prowler_report.py prowler-output-111111111111-20250928153357.ocsf.json")
+        print("Usage: python3 ProwlerMD.py <prowler_json_file>")
+        print("Example: python3 ProwlerMD.py prowler-output-111111111111-20250928153357.ocsf.json")
         sys.exit(1)
     
     # Get input file path from command line argument
@@ -243,8 +314,16 @@ def main():
     input_path = Path(input_file)
     output_file = str(input_path.with_suffix('.md'))
     
+    # Set up POC mappings file path
+    script_dir = Path(__file__).parent
+    poc_mappings_file = script_dir / "poc_mappings.json"
+    
     print("Starting AWS Prowler Security Report Generation...")
     print("=" * 60)
+    
+    # Step 0: Load POC mappings
+    poc_data = load_poc_mappings(str(poc_mappings_file))
+    poc_mappings = {k: v for k, v in poc_data.items() if not k.startswith('_')}
     
     # Step 1: Load the Prowler JSON data
     findings = load_prowler_data(input_file)
@@ -263,9 +342,13 @@ def main():
     sorted_findings, severity_counts = sort_findings_by_severity(grouped_findings)
     
     # Step 5: Generate the markdown report
-    report_content = generate_markdown_report(sorted_findings, severity_counts)
+    report_content = generate_markdown_report(sorted_findings, severity_counts, poc_mappings)
     
-    # Step 6: Write the report to file
+    # Step 6: Save updated POC mappings
+    poc_data.update(poc_mappings)  # Merge any new findings into poc_data
+    save_poc_mappings(poc_data, str(poc_mappings_file))
+    
+    # Step 7: Write the report to file
     print(f"Writing report to {output_file}...")
     try:
         with open(output_file, 'w', encoding='utf-8') as f:
