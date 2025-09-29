@@ -1,3 +1,17 @@
+# macOS system files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+WARP.md
+
+# Prowler specific sensitive files
+*.ocsf.json
+*.ocsf.md 
+
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[codz]
