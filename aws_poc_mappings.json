@@ -2,7 +2,7 @@
   "_metadata": {
     "description": "Mapping of Prowler AWS finding titles to Proof of Concept commands/instructions",
     "version": "1.0",
-    "last_updated": "2025-09-29"
+    "last_updated": "2025-09-30"
   },
   "Check if SQS queues have policy set as Public": "aws sqs get-queue-attributes --queue-url <QUEUE_URL> --attribute-names Policy\naws sqs list-queues | jq '.QueueUrls[]'",
   "Ensure only hardware MFA is enabled for the root account": "# Check root account MFA devices\naws iam get-account-summary | jq '.SummaryMap.AccountMFAEnabled'\naws iam list-virtual-mfa-devices --assignment-status Assigned | jq '.VirtualMFADevices[] | select(.User.UserName == \"root\")'",

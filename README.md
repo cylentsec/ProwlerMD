@@ -1,22 +1,34 @@
 # ProwlerMD
-A Python script that parses Prowler AWS scan findings from JSON and generates a report in Markdown.
+A Python script that parses Prowler AWS and Azure scan findings from JSON and generates a report in Markdown.
 
 ## Project Overview
 
-ProwlerMD is a Python utility that processes AWS Prowler security scan results and generates consolidated Markdown reports. It transforms verbose JSON output from Prowler into readable security reports focused on failed findings with Critical, High, Medium, and Low severity levels.
+ProwlerMD is a Python utility that processes AWS and Azure Prowler security scan results and generates consolidated Markdown reports. It transforms verbose JSON output from Prowler into readable security reports focused on failed findings with Critical, High, Medium, and Low severity levels.
 
 ## Quick Start
 
 ### Basic Usage
 ```bash
-python3 ProwlerMD.py <prowler-json-file>
+usage: ProwlerMD.py [-h] --provider {aws,azure} input_file
+
+Multi-Cloud Prowler Security Report Generator
+
+positional arguments:
+  input_file            Path to the Prowler JSON output file
+
+options:
+  -h, --help            show this help message and exit
+  --provider {aws,azure}, -p {aws,azure}
+                        Cloud provider (aws or azure)
+
+Examples:
+  python3 ProwlerMD.py --provider aws prowler-output-111111111111-20250928153357.ocsf.json
+  python3 ProwlerMD.py -p azure prowler-output-222222222222-20250930120000.ocsf.json
 ```
 
-### Example
-```bash
-python3 ProwlerMD.py prowler-output-111111111111-20250928153357.ocsf.json
-# Generates: prowler-output-111111111111-20250928153357.ocsf.md
-```
+### Proof of Concepts
+
+The `*_poc_mappings.json` files contain a key:value pair of finding titles mapped to proof of concept steps/commands to enable the analyst to verify each finding. When ProwlerMD parses each finding title in the Prowler JSON report file, it checks the poc JSON for the finding title. If there's a match, it inserts the PoC data into the Markdown report finding. If there is no match, it adds the finding title to the PoC JSON with an empty value. After each use the analyst should check this file and add PoC data to any blank finding titles, then rerun the report. It's important to keep updating the PoC JSON files during each assessment to ensure that future reports contain relevant PoC data in findings.
 
 ### Requirements
 - Python 3.x (tested with Python 3.12.8)
@@ -95,6 +107,7 @@ Generated Markdown reports include:
 - Table of contents with anchor links
 - Findings organized by severity sections
 - Each finding shows: title, severity, resource types, risk description, remediation, affected resource count, and resource list
+- Proof of Concept when available
 - Reference URLs when available
 
 ## File Structure
@@ -105,6 +118,7 @@ ProwlerMD/
 ├── README.md                       # Basic project description
 ├── .gitignore                      # Standard Python gitignore
 ├── LICENSE                         # Project license
+├── *_poc_mappings.json             # AWS and Azure proof of concept mappings, finding title to PoC steps/commands
 └── *.ocsf.json                     # Prowler input files (not committed)
 └── *.ocsf.md                       # Generated reports (not committed)
 ```

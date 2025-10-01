@@ -1,12 +1,15 @@
 #!/usr/bin/env python3
 """
-AWS Prowler Security Report Generator
+Multi-Cloud Prowler Security Report Generator
 
 This script processes Prowler JSON output and creates a consolidated markdown report
-showing only FAIL findings with Critical, High, and Medium severity.
+showing only FAIL findings with Critical, High, Medium, and Low severity.
 Consolidates duplicate findings by CHECK_TITLE and lists all affected resources.
+
+Supports AWS and Azure cloud providers.
 """
 
+import argparse
 import json
 import sys
 from datetime import datetime
@@ -168,7 +171,7 @@ def extract_finding_details(finding, resources, resource_types, poc_mappings):
         "reference": reference
     }
 
-def generate_markdown_report(sorted_findings, severity_counts, poc_mappings):
+def generate_markdown_report(sorted_findings, severity_counts, poc_mappings, provider):
     """Generate the markdown report."""
     print("Generating markdown report...")
     
@@ -179,14 +182,14 @@ def generate_markdown_report(sorted_findings, severity_counts, poc_mappings):
     total_findings = sum(severity_counts.values())
     
     report_lines.extend([
-        "# AWS Security Report",
+        f"# {provider.upper()} Security Report",
         "",
         f"**Generated:** {current_time}",
         f"**Total Findings:** {total_findings}",
         "",
         "## Executive Summary",
         "",
-        f"This report contains {total_findings} security findings from the AWS Prowler scan, filtered to show only failed checks with Critical, High, Medium, and Low severity levels.",
+        f"This report contains {total_findings} security findings from the {provider.upper()} Prowler scan, filtered to show only failed checks with Critical, High, Medium, and Low severity levels.",
         "",
         f"- **Critical Severity:** {severity_counts['Critical']} findings",
         f"- **High Severity:** {severity_counts['High']} findings", 
@@ -296,14 +299,29 @@ def generate_markdown_report(sorted_findings, severity_counts, poc_mappings):
 def main():
     """Main function to process Prowler output and generate report."""
     
-    # Check command line arguments
-    if len(sys.argv) != 2:
-        print("Usage: python3 ProwlerMD.py <prowler_json_file>")
-        print("Example: python3 ProwlerMD.py prowler-output-111111111111-20250928153357.ocsf.json")
-        sys.exit(1)
+    # Set up argument parser
+    parser = argparse.ArgumentParser(
+        description='Multi-Cloud Prowler Security Report Generator',
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog="""Examples:
+  python3 ProwlerMD.py --provider aws prowler-output-111111111111-20250928153357.ocsf.json
+  python3 ProwlerMD.py -p azure prowler-output-222222222222-20250930120000.ocsf.json
+        """)
     
-    # Get input file path from command line argument
-    input_file = sys.argv[1]
+    parser.add_argument(
+        'input_file',
+        help='Path to the Prowler JSON output file')
+    
+    parser.add_argument(
+        '--provider', '-p',
+        required=True,
+        choices=['aws', 'azure'],
+        help='Cloud provider (aws or azure)')
+    
+    # Parse arguments
+    args = parser.parse_args()
+    input_file = args.input_file
+    provider = args.provider.lower()
     
     # Validate input file exists
     if not Path(input_file).exists():
@@ -314,11 +332,11 @@ def main():
     input_path = Path(input_file)
     output_file = str(input_path.with_suffix('.md'))
     
-    # Set up POC mappings file path
+    # Set up POC mappings file path based on provider
     script_dir = Path(__file__).parent
-    poc_mappings_file = script_dir / "poc_mappings.json"
+    poc_mappings_file = script_dir / f"{provider}_poc_mappings.json"
     
-    print("Starting AWS Prowler Security Report Generation...")
+    print(f"Starting {provider.upper()} Prowler Security Report Generation...")
     print("=" * 60)
     
     # Step 0: Load POC mappings
@@ -342,7 +360,7 @@ def main():
     sorted_findings, severity_counts = sort_findings_by_severity(grouped_findings)
     
     # Step 5: Generate the markdown report
-    report_content = generate_markdown_report(sorted_findings, severity_counts, poc_mappings)
+    report_content = generate_markdown_report(sorted_findings, severity_counts, poc_mappings, provider)
     
     # Step 6: Save updated POC mappings
     poc_data.update(poc_mappings)  # Merge any new findings into poc_data
